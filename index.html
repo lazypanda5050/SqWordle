@@ -228,6 +228,7 @@
       const maxGuesses = 6;
       const keyRows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
       const rank = { absent: 0, present: 1, correct: 2 };
+      const wordCache = new Map([[answer, true]]);
 
       const board = document.getElementById("board");
       const keyboard = document.getElementById("keyboard");
@@ -238,12 +239,14 @@
       let current;
       let gameOver;
       let keyStates;
+      let isSubmitting;
 
       function startGame() {
         guesses = [];
         current = "";
         gameOver = false;
         keyStates = {};
+        isSubmitting = false;
         status.textContent = "Guess the 8-letter answer.";
         status.className = "status";
         drawBoard();
@@ -304,6 +307,7 @@
       }
 
       function handleInput(input) {
+        if (isSubmitting) return;
         if (gameOver && input !== "Enter") return;
 
         if (input === "Enter") {
@@ -324,7 +328,9 @@
         }
       }
 
-      function submitGuess() {
+      async function submitGuess() {
+        if (isSubmitting) return;
+
         if (gameOver) {
           startGame();
           return;
@@ -337,6 +343,24 @@
         }
 
         const guess = current;
+        isSubmitting = true;
+        showMessage("Checking word...");
+
+        try {
+          const isWord = await isRealWord(guess);
+          if (!isWord) {
+            showMessage("Not in word list.", "error");
+            shakeCurrentRow();
+            return;
+          }
+        } catch {
+          showMessage("Could not check word. Try again.", "error");
+          shakeCurrentRow();
+          return;
+        } finally {
+          isSubmitting = false;
+        }
+
         const results = scoreGuess(guess);
         guesses.push(guess);
         current = "";
@@ -358,6 +382,15 @@
         }
 
         showMessage(`${maxGuesses - guesses.length} guesses left.`);
+      }
+
+      async function isRealWord(word) {
+        if (wordCache.has(word)) return wordCache.get(word);
+
+        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
+        const isWord = response.ok;
+        wordCache.set(word, isWord);
+        return isWord;
       }
 
       function scoreGuess(guess) {
